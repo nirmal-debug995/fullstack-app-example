@@ -1,32 +1,61 @@
-name: Deploy to Azure VM
+name: Fullstack App CI/CD
 
 on:
   push:
     branches:
-      - main
+      - main   # Trigger on pushes to main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      # Step 1: Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Deploy to Azure VM
-      uses: appleboy/ssh-action@v0.1.6
-      with:
-        host: ${{ secrets.VM_HOST }}
-        username: ${{ secrets.VM_USER }}
-        key: ${{ secrets.VM_SSH_KEY }}
-        port: 22
-        script: |
-          cd ~/fullstack-app-example
-          git pull origin main
-          cd backend
-          npm install
-          pm2 restart backend || pm2 start app.js --name backend
-          cd ../frontend
-          npm install
-          npm run build
-          pm2 restart frontend || pm2 start serve --name frontend -s build -l 3000
+      # Step 2: Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      # Step 3: Install backend dependencies
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      # Step 4: Install frontend dependencies
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      # Step 5: Build frontend
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+      # Step 6: Deploy to VM via SSH
+      - name: Copy files to VM
+        uses: appleboy/scp-action@v0.1.5
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          source: "./"
+          target: "/home/azureuser/fullstack-app-example"
+
+      # Step 7: Restart PM2 on VM
+      - name: Restart PM2 processes
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            cd /home/azureuser/fullstack-app-example
+            pm2 delete all || true
+            pm2 start ecosystem.config.js
+            pm2 save
