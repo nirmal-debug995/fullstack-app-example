@@ -1,0 +1,32 @@
+name: Deploy to Azure VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Deploy to Azure VM
+      uses: appleboy/ssh-action@v0.1.6
+      with:
+        host: ${{ secrets.VM_HOST }}
+        username: ${{ secrets.VM_USER }}
+        key: ${{ secrets.VM_SSH_KEY }}
+        port: 22
+        script: |
+          cd ~/my-fullstack-app
+          git pull origin main
+          cd backend
+          npm install
+          pm2 restart backend || pm2 start app.js --name backend
+          cd ../frontend
+          npm install
+          npm run build
+          pm2 restart frontend || pm2 start serve --name frontend -s build -l 3000
